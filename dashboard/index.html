@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Governance Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-indigo-600 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">AI Governance Platform</h1>
+            <div class="flex items-center space-x-4">
+                <select id="timeRange" class="bg-indigo-700 text-white px-3 py-1 rounded" onchange="refreshData()">
+                    <option value="1">Last 24 hours</option>
+                    <option value="7" selected>Last 7 days</option>
+                    <option value="30">Last 30 days</option>
+                </select>
+                <button onclick="refreshData()" class="bg-indigo-700 hover:bg-indigo-800 px-4 py-2 rounded flex items-center gap-2">
+                    <span id="refreshIcon">&#8635;</span> Refresh
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50" style="display: none;">
+        <div class="bg-white rounded-lg p-6 shadow-xl flex items-center gap-4">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            <span class="text-gray-700">Loading dashboard data...</span>
+        </div>
+    </div>
+
+    <!-- Error Message -->
+    <div id="errorMessage" class="container mx-auto mt-4 px-6" style="display: none;">
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded"></div>
+    </div>
+
+    <main class="container mx-auto p-6">
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="text-sm text-gray-500 uppercase tracking-wide">Total Requests</div>
+                <div class="text-3xl font-bold text-gray-900" id="totalRequests">-</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="text-sm text-gray-500 uppercase tracking-wide">Unique Users</div>
+                <div class="text-3xl font-bold text-gray-900" id="uniqueUsers">-</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="text-sm text-gray-500 uppercase tracking-wide">Active Agents</div>
+                <div class="text-3xl font-bold text-blue-600" id="uniqueAgents">-</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="text-sm text-gray-500 uppercase tracking-wide">PII Incidents</div>
+                <div class="text-3xl font-bold text-red-600" id="piiIncidents">-</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="text-sm text-gray-500 uppercase tracking-wide">PII Rate</div>
+                <div class="text-3xl font-bold" id="piiRate">-</div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">Requests by Department</h3>
+                <canvas id="deptChart"></canvas>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">Top Agents by Usage</h3>
+                <canvas id="agentChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Department Leaderboard -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h3 class="text-lg font-semibold mb-4">Department Leaderboard</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requests</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Users</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agents</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PII Incidents</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PII Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardBody" class="bg-white divide-y divide-gray-200">
+                        <tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Registered Agents -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-semibold mb-4">Registered AI Agents</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Team</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Environment</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requests</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PII Incidents</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agentsBody" class="bg-white divide-y divide-gray-200">
+                        <tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-white p-4 mt-8">
+        <div class="container mx-auto text-center text-sm">
+            AI Governance Platform - Enterprise Edition | Last updated: <span id="lastUpdate">-</span>
+        </div>
+    </footer>
+
+    <script>
+        // Dynamic API base - uses same origin as dashboard
+        const API_BASE = window.location.origin + '/api/v1/enterprise';
+        let deptChart, agentChart;
+        let isLoading = false;
+
+        function showLoading(show) {
+            isLoading = show;
+            document.getElementById('loadingIndicator').style.display = show ? 'flex' : 'none';
+            document.getElementById('refreshIcon').style.animation = show ? 'spin 1s linear infinite' : 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            if (message) {
+                errorDiv.style.display = 'block';
+                errorDiv.querySelector('div').textContent = message;
+            } else {
+                errorDiv.style.display = 'none';
+            }
+        }
+
+        async function fetchData(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(`API Error: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                return null;
+            }
+        }
+
+        async function refreshData() {
+            if (isLoading) return;
+            showLoading(true);
+            showError('');
+
+            const days = document.getElementById('timeRange').value;
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleString();
+
+            try {
+                // Fetch all dashboard data in one call for efficiency
+                const dashboardData = await fetchData(`/dashboard-data?days=${days}`);
+
+                if (dashboardData) {
+                    const analytics = dashboardData.analytics;
+
+                    // Update summary cards
+                    document.getElementById('totalRequests').textContent = analytics.total_requests.toLocaleString();
+                    document.getElementById('uniqueUsers').textContent = analytics.unique_users.toLocaleString();
+                    document.getElementById('uniqueAgents').textContent = analytics.unique_agents.toLocaleString();
+                    document.getElementById('piiIncidents').textContent = analytics.pii_detected_count.toLocaleString();
+
+                    const piiRate = analytics.total_requests > 0
+                        ? ((analytics.pii_detected_count / analytics.total_requests) * 100).toFixed(1)
+                        : 0;
+                    document.getElementById('piiRate').textContent = piiRate + '%';
+                    document.getElementById('piiRate').className = `text-3xl font-bold ${piiRate > 50 ? 'text-red-600' : piiRate > 20 ? 'text-yellow-600' : 'text-green-600'}`;
+
+                    // Update charts
+                    if (analytics.by_department && analytics.by_department.length > 0) {
+                        updateDeptChart(analytics.by_department);
+                    } else {
+                        showEmptyChart('deptChart', 'No department data available');
+                    }
+
+                    if (analytics.by_agent && analytics.by_agent.length > 0) {
+                        updateAgentChart(analytics.by_agent);
+                    } else {
+                        showEmptyChart('agentChart', 'No agent data available');
+                    }
+
+                    // Update tables
+                    if (dashboardData.leaderboard && dashboardData.leaderboard.length > 0) {
+                        updateLeaderboard(dashboardData.leaderboard);
+                    } else {
+                        document.getElementById('leaderboardBody').innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">No department data available yet. Start making API requests to see data here.</td></tr>';
+                    }
+
+                    if (dashboardData.agents && dashboardData.agents.length > 0) {
+                        updateAgentsTable(dashboardData.agents);
+                    } else {
+                        document.getElementById('agentsBody').innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">No agents registered yet. Use the API to register agents.</td></tr>';
+                    }
+                } else {
+                    showError('Failed to load dashboard data. Please check the console for details.');
+                }
+            } catch (error) {
+                console.error('Dashboard refresh error:', error);
+                showError('Failed to load dashboard data: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function showEmptyChart(canvasId, message) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+
+            // Clear any existing chart
+            if (canvasId === 'deptChart' && deptChart) {
+                deptChart.destroy();
+                deptChart = null;
+            }
+            if (canvasId === 'agentChart' && agentChart) {
+                agentChart.destroy();
+                agentChart = null;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#9CA3AF';
+            ctx.textAlign = 'center';
+            ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+        }
+
+        function updateDeptChart(deptData) {
+            const ctx = document.getElementById('deptChart').getContext('2d');
+            if (deptChart) deptChart.destroy();
+
+            deptChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: deptData.map(d => d.department),
+                    datasets: [{
+                        data: deptData.map(d => d.total_requests),
+                        backgroundColor: ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        function updateAgentChart(agentData) {
+            const ctx = document.getElementById('agentChart').getContext('2d');
+            if (agentChart) agentChart.destroy();
+
+            agentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: agentData.slice(0, 5).map(a => a.agent_id),
+                    datasets: [{
+                        label: 'Total Requests',
+                        data: agentData.slice(0, 5).map(a => a.total_requests),
+                        backgroundColor: '#4F46E5'
+                    }, {
+                        label: 'PII Incidents',
+                        data: agentData.slice(0, 5).map(a => a.pii_incidents),
+                        backgroundColor: '#EF4444'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        function updateLeaderboard(data) {
+            const tbody = document.getElementById('leaderboardBody');
+            tbody.innerHTML = data.map(d => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap font-medium">${d.department}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${d.total_requests.toLocaleString()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${d.unique_users || 0}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${d.unique_agents || 0}</td>
+                    <td class="px-6 py-4 whitespace-nowrap ${d.pii_incidents > 0 ? 'text-red-600 font-semibold' : ''}">${d.pii_incidents}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 rounded text-xs ${d.pii_rate > 50 ? 'bg-red-100 text-red-800' : d.pii_rate > 20 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">
+                            ${d.pii_rate || 0}%
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateAgentsTable(agents) {
+            const tbody = document.getElementById('agentsBody');
+            tbody.innerHTML = agents.map(a => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="font-medium">${a.agent_name}</div>
+                        <div class="text-sm text-gray-500">${a.agent_id}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">${a.department}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${a.team || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 rounded text-xs ${a.environment === 'production' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                            ${a.environment}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">${a.total_requests}</td>
+                    <td class="px-6 py-4 whitespace-nowrap ${a.pii_incidents > 0 ? 'text-red-600' : ''}">${a.pii_incidents}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 rounded text-xs ${a.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${a.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Add CSS for spin animation
+        const style = document.createElement('style');
+        style.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+
+        // Initial load
+        refreshData();
+        // Auto-refresh every 30 seconds
+        setInterval(refreshData, 30000);
+    </script>
+</body>
+</html>
