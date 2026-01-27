@@ -120,7 +120,7 @@ gcloud run deploy ${SERVICE_NAME} \
     --min-instances 0 \
     --max-instances 10 \
     --port 8080 \
-    --set-env-vars "PROJECT_ID=${PROJECT_ID},LOCATION=${REGION},BIGQUERY_DATASET=ai_governance,DEBUG=false,GEMINI_MODEL=gemini-2.0-flash" \
+    --set-env-vars "PROJECT_ID=${PROJECT_ID},LOCATION=${REGION},BIGQUERY_DATASET=ai_governance,DEBUG=false,GEMINI_MODEL=gemini-3-flash-preview" \
     --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" \
     --timeout 300
 

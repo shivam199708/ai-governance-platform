@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        # Case insensitive env vars for Cloud Run compatibility
+        case_sensitive = False
 
 
 @lru_cache()

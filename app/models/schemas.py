@@ -99,6 +99,25 @@ class PIIDetectionResult(BaseModel):
     pii_types: List[str] = Field(default_factory=list)
     redacted_text: Optional[str] = None
     details: Optional[str] = None
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class ToxicityResult(BaseModel):
+    """Result of toxicity detection using Gemini's safety features"""
+    is_toxic: bool
+    toxicity_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    categories: List[str] = Field(default_factory=list)  # hate_speech, harassment, etc.
+    details: Optional[str] = None
+    category_scores: Dict[str, float] = Field(default_factory=dict)
+
+
+class PromptInjectionResult(BaseModel):
+    """Result of prompt injection detection"""
+    is_injection: bool
+    injection_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    injection_types: List[str] = Field(default_factory=list)  # instruction_override, jailbreak, etc.
+    details: Optional[str] = None
+    suspicious_patterns: List[str] = Field(default_factory=list)
 
 
 class GuardrailResult(BaseModel):
@@ -120,6 +139,8 @@ class GuardrailResponse(BaseModel):
     safe_prompt: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     total_processing_time_ms: float
+    # Token usage for cost tracking
+    token_usage: Optional[Dict[str, Any]] = Field(default=None, description="Token usage and estimated cost")
 
 
 class AuditLog(BaseModel):
