@@ -36,12 +36,20 @@ app = FastAPI(
 )
 
 # Add CORS middleware
+# Configure allowed origins based on environment
+ALLOWED_ORIGINS = [
+    "https://ai-governance-platform-902023244402.us-central1.run.app",
+    "http://localhost:8080",
+    "http://localhost:3000",
+    "http://127.0.0.1:8080",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 # Include routers

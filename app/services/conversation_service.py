@@ -300,21 +300,28 @@ class ConversationService:
             return []
 
         try:
+            # Use parameterized queries to prevent SQL injection
+            query_params = [
+                bigquery.ScalarQueryParameter("days", "INT64", days),
+                bigquery.ScalarQueryParameter("min_messages", "INT64", min_messages),
+            ]
+
             where_clauses = [
-                f"c.started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)",
-                f"c.message_count >= {min_messages}",
+                "c.started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)",
+                "c.message_count >= @min_messages",
                 "c.status = 'completed'"
             ]
 
             if agent_id:
-                where_clauses.append(f"c.agent_id = '{agent_id}'")
+                query_params.append(bigquery.ScalarQueryParameter("agent_id", "STRING", agent_id))
+                where_clauses.append("c.agent_id = @agent_id")
 
             if not include_pii_incidents:
                 where_clauses.append("c.total_pii_incidents = 0")
 
             where_clause = " AND ".join(where_clauses)
 
-            # Get qualifying conversations
+            # Get qualifying conversations with parameterized query
             query = f"""
             SELECT
                 c.session_id,
@@ -329,8 +336,10 @@ class ConversationService:
             LIMIT 1000
             """
 
+            job_config = bigquery.QueryJobConfig(query_parameters=query_params)
+
             conversations = []
-            for conv_row in self.client.query(query).result():
+            for conv_row in self.client.query(query, job_config=job_config).result():
                 # Get messages for this conversation
                 msg_query = f"""
                 SELECT

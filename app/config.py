@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # API Configuration
     api_title: str = "AI Governance Platform"
     api_version: str = "0.1.0"
-    debug: bool = True
+    debug: bool = False  # Default to False for security
 
     class Config:
         env_file = ".env"

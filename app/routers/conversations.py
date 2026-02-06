@@ -3,7 +3,21 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from app.services.conversation_service import get_conversation_service
 from typing import List, Dict, Any, Optional
+from enum import Enum
 import logging
+
+
+class MessageRole(str, Enum):
+    """Valid message roles"""
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+class ConversationStatus(str, Enum):
+    """Valid conversation statuses"""
+    COMPLETED = "completed"
+    ABANDONED = "abandoned"
+    ERROR = "error"
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/conversations", tags=["Conversations"])
@@ -21,9 +35,9 @@ class StartConversationRequest(BaseModel):
 class AddMessageRequest(BaseModel):
     session_id: str = Field(..., description="Conversation session ID")
     agent_id: str = Field(..., description="Agent ID")
-    role: str = Field(..., description="Message role: 'user' or 'assistant'")
+    role: MessageRole = Field(..., description="Message role: 'user' or 'assistant'")
     content: str = Field(..., description="Message content")
-    turn_number: int = Field(..., description="Turn number in conversation (1, 2, 3...)")
+    turn_number: int = Field(..., ge=1, le=10000, description="Turn number in conversation (1, 2, 3...)")
     has_pii: bool = Field(default=False, description="Whether message contains PII")
     was_blocked: bool = Field(default=False, description="Whether message was blocked by guardrails")
     guardrail_result: Optional[Dict[str, Any]] = Field(default=None, description="Guardrail check result")
@@ -32,7 +46,7 @@ class AddMessageRequest(BaseModel):
 
 class EndConversationRequest(BaseModel):
     session_id: str = Field(..., description="Conversation session ID")
-    status: str = Field(default="completed", description="Final status: completed, abandoned, error")
+    status: ConversationStatus = Field(default=ConversationStatus.COMPLETED, description="Final status: completed, abandoned, error")
 
 
 @router.post("/start")
@@ -80,7 +94,7 @@ async def add_message(request: AddMessageRequest) -> Dict[str, Any]:
         message_id = await conversation_service.add_message(
             session_id=request.session_id,
             agent_id=request.agent_id,
-            role=request.role,
+            role=request.role.value,
             content=request.content,
             turn_number=request.turn_number,
             has_pii=request.has_pii,
@@ -114,7 +128,7 @@ async def end_conversation(request: EndConversationRequest) -> Dict[str, Any]:
     try:
         await conversation_service.end_conversation(
             session_id=request.session_id,
-            status=request.status
+            status=request.status.value
         )
 
         return {
@@ -158,7 +172,7 @@ async def export_training_data(
     days: int = Query(default=30, ge=1, le=365, description="Days of data to export"),
     include_pii: bool = Query(default=False, description="Include conversations with PII incidents"),
     only_with_feedback: bool = Query(default=False, description="Only conversations with user feedback"),
-    min_messages: int = Query(default=2, ge=1, description="Minimum messages per conversation")
+    min_messages: int = Query(default=2, ge=1, le=1000, description="Minimum messages per conversation")
 ) -> Dict[str, Any]:
     """
     Export conversations for model training/fine-tuning.

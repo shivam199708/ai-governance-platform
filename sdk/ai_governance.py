@@ -452,11 +452,136 @@ class AsyncGovernanceClient(GovernanceClient):
                 response.raise_for_status()
                 return await response.json()
 
-    async def check_input_async(self, prompt: str, **kwargs) -> InputCheckResult:
+    async def check_input_async(
+        self,
+        prompt: str,
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        guardrails: List[str] = None
+    ) -> InputCheckResult:
         """Async version of check_input"""
-        # Implementation similar to sync but using _post_async
-        pass  # Would implement full async version
+        if guardrails is None:
+            guardrails = ["pii_detection"]
 
-    async def check_output_async(self, agent_response: str, **kwargs) -> OutputCheckResult:
+        data = {
+            "prompt": prompt,
+            "agent_id": self.agent_id,
+            "user_id": user_id,
+            "department": self.department,
+            "session_id": session_id or (self.session.session_id if self.session else None),
+            "guardrails": guardrails
+        }
+
+        result = await self._post_async("/api/v1/guardrails/check", data)
+
+        has_pii = False
+        pii_types = []
+        for r in result.get("results", []):
+            if r.get("guardrail_type") == "pii_detection":
+                details = r.get("details", {})
+                has_pii = details.get("has_pii", False)
+                pii_types = details.get("pii_types", [])
+
+        return InputCheckResult(
+            request_id=result["request_id"],
+            passed=result["overall_status"] == "passed",
+            blocked=result["overall_status"] == "blocked",
+            has_pii=has_pii,
+            pii_types=pii_types,
+            safe_prompt=result.get("safe_prompt") or prompt,
+            original_prompt=prompt
+        )
+
+    async def check_output_async(
+        self,
+        agent_response: str,
+        user_id: Optional[str] = None,
+        original_prompt: Optional[str] = None,
+        session_id: Optional[str] = None
+    ) -> OutputCheckResult:
         """Async version of check_output"""
-        pass  # Would implement full async version
+        data = {
+            "agent_id": self.agent_id,
+            "user_id": user_id,
+            "department": self.department,
+            "session_id": session_id or (self.session.session_id if self.session else None),
+            "agent_response": agent_response,
+            "original_prompt": original_prompt
+        }
+
+        result = await self._post_async("/api/v1/guardrails/check-output", data)
+
+        return OutputCheckResult(
+            request_id=result["request_id"],
+            is_safe=result["is_safe"],
+            blocked=not result["is_safe"],
+            violations=result.get("violations", []),
+            blocked_reason=result.get("blocked_reason")
+        )
+
+    async def start_conversation_async(
+        self,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict] = None
+    ) -> ConversationSession:
+        """Async version of start_conversation"""
+        data = {
+            "agent_id": self.agent_id,
+            "user_id": user_id,
+            "department": self.department,
+            "metadata": metadata
+        }
+
+        result = await self._post_async("/api/v1/conversations/start", data)
+
+        self.session = ConversationSession(
+            session_id=result["session_id"],
+            agent_id=self.agent_id,
+            turn_number=0
+        )
+
+        return self.session
+
+    async def log_message_async(
+        self,
+        role: str,
+        content: str,
+        has_pii: bool = False,
+        was_blocked: bool = False,
+        guardrail_result: Optional[Dict] = None,
+        processing_time_ms: Optional[float] = None
+    ) -> str:
+        """Async version of log_message"""
+        if not self.session:
+            raise ValueError("No active conversation. Call start_conversation_async() first.")
+
+        if role == "user":
+            self.session.turn_number += 1
+
+        data = {
+            "session_id": self.session.session_id,
+            "agent_id": self.agent_id,
+            "role": role,
+            "content": content,
+            "turn_number": self.session.turn_number,
+            "has_pii": has_pii,
+            "was_blocked": was_blocked,
+            "guardrail_result": guardrail_result,
+            "processing_time_ms": processing_time_ms
+        }
+
+        result = await self._post_async("/api/v1/conversations/message", data)
+        return result["message_id"]
+
+    async def end_conversation_async(self, status: str = "completed"):
+        """Async version of end_conversation"""
+        if not self.session:
+            return
+
+        data = {
+            "session_id": self.session.session_id,
+            "status": status
+        }
+
+        await self._post_async("/api/v1/conversations/end", data)
+        self.session = None
